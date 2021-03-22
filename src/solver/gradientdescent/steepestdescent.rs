@@ -93,6 +93,16 @@ where
 
         Ok(ArgminIterData::new().param(next_param).cost(next_cost))
     }
+
+    fn terminate(&mut self, state: &IterState<O>) -> TerminationReason {
+        if (state.prev_cost - state.cost).abs() < F::epsilon()
+            && state.prev_param.sub(&state.param).norm() < F::epsilon()
+        {
+            TerminationReason::NoChangeInCost
+        } else {
+            TerminationReason::NotTerminated
+        }
+    }
 }
 
 #[cfg(test)]
