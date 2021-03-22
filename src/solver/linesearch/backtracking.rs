@@ -169,14 +169,16 @@ where
     }
 
     fn terminate(&mut self, state: &IterState<O>) -> TerminationReason {
-        if self.condition.eval(
-            state.get_cost(),
-            state.get_grad().unwrap_or_default(),
-            self.init_cost,
-            self.init_grad.clone(),
-            self.search_direction.clone().unwrap(),
-            self.alpha,
-        ) {
+        if state.iter != 0
+            && self.condition.eval(
+                state.get_cost(),
+                state.get_grad().unwrap_or_default(),
+                self.init_cost,
+                self.init_grad.clone(),
+                self.search_direction.clone().unwrap(),
+                self.alpha,
+            )
+        {
             TerminationReason::LineSearchConditionMet
         } else {
             TerminationReason::NotTerminated
