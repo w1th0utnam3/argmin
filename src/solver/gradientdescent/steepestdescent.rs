@@ -72,12 +72,7 @@ where
         // Run solver
         let ArgminResult {
             operator: line_op,
-            state:
-                IterState {
-                    param: next_param,
-                    cost: next_cost,
-                    ..
-                },
+            state: next_state,
         } = Executor::new(
             OpWrapper::new_from_wrapper(op),
             self.linesearch.clone(),
@@ -90,8 +85,17 @@ where
 
         // Get back operator and function evaluation counts
         op.consume_op(line_op);
+        // The following counters have to be carried over manually, because the executor strips them
+        // from the returned operator and they are only accessible from the state
+        op.cost_func_count += next_state.cost_func_count;
+        op.grad_func_count += next_state.grad_func_count;
+        op.hessian_func_count += next_state.hessian_func_count;
+        op.jacobian_func_count += next_state.jacobian_func_count;
+        op.modify_func_count += next_state.modify_func_count;
 
-        Ok(ArgminIterData::new().param(next_param).cost(next_cost))
+        Ok(ArgminIterData::new()
+            .param(next_state.param)
+            .cost(next_state.cost))
     }
 
     fn terminate(&mut self, state: &IterState<O>) -> TerminationReason {
