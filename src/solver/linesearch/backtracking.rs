@@ -39,8 +39,6 @@ pub struct BacktrackingLineSearch<P, L, F> {
     condition: Box<L>,
     /// alpha
     alpha: F,
-    /// alpha value for the next iteration
-    next_alpha: F,
 }
 
 impl<P: Default, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F> {
@@ -54,7 +52,6 @@ impl<P: Default, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F> {
             rho: F::from_f64(0.9).unwrap(),
             condition: Box::new(condition),
             alpha: F::from_f64(1.0).unwrap(),
-            next_alpha: F::from_f64(1.0).unwrap(),
         }
     }
 
@@ -69,6 +66,36 @@ impl<P: Default, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F> {
         }
         self.rho = rho;
         Ok(self)
+    }
+}
+
+impl<P, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F>
+where
+    P: ArgminSub<P, P> + ArgminDot<P, F> + ArgminScaledAdd<P, F, P>,
+    L: LineSearchCondition<P, F>,
+{
+    fn backtracking_step<O: ArgminOp<Param = P, Output = F, Float = F>,>(&self, op: &mut OpWrapper<O>) -> Result<ArgminIterData<O>, Error> {
+        let new_param = self
+            .init_param
+            .scaled_add(&self.alpha, self.search_direction.as_ref().unwrap());
+
+        let cur_cost = op.apply(&new_param)?;
+
+        println!("alpha={}", self.alpha);
+        println!("cur_cost={:.e}, cost_diff={:.e}", cur_cost.to_f64().unwrap(), (self.init_cost - cur_cost).to_f64().unwrap());
+
+        let out = if self.condition.requires_cur_grad() {
+            ArgminIterData::new()
+                .grad(op.gradient(&new_param)?)
+                .param(new_param)
+                .cost(cur_cost)
+        } else {
+            ArgminIterData::new()
+                .param(new_param)
+                .cost(cur_cost)
+        };
+
+        Ok(out)
     }
 }
 
@@ -152,8 +179,6 @@ where
             .map(Result::Ok)
             .unwrap_or_else(|| op.gradient(&self.init_param))?;
 
-        self.next_alpha = self.alpha;
-
         if self.search_direction.is_none() {
             return Err(ArgminError::NotInitialized {
                 text: "BacktrackingLineSearch: search_direction must be set.".to_string(),
@@ -176,10 +201,9 @@ where
     }
 
     fn terminate(&mut self, state: &IterState<O>) -> TerminationReason {
-        // The iteration 0 of the backtracking has to be ignored, because we didn't apply the search
-        // direction to the state, yet.
-        if state.iter > 0
-            && self.condition.eval(
+        println!("terminate iter={} alpha={}", state.iter, self.alpha);
+
+        if self.condition.eval(
                 state.get_cost(),
                 state.get_grad().unwrap_or_default(),
                 self.init_cost,
