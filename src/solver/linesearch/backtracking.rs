@@ -39,6 +39,8 @@ pub struct BacktrackingLineSearch<P, L, F> {
     condition: Box<L>,
     /// alpha
     alpha: F,
+    /// alpha value for the next iteration
+    next_alpha: F,
 }
 
 impl<P: Default, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F> {
@@ -52,6 +54,7 @@ impl<P: Default, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F> {
             rho: F::from_f64(0.9).unwrap(),
             condition: Box::new(condition),
             alpha: F::from_f64(1.0).unwrap(),
+            next_alpha: F::from_f64(1.0).unwrap(),
         }
     }
 
@@ -84,7 +87,7 @@ where
     fn set_init_alpha(&mut self, alpha: F) -> Result<(), Error> {
         if alpha <= F::from_f64(0.0).unwrap() {
             return Err(ArgminError::InvalidParameter {
-                text: "LineSearch: Inital alpha must be > 0.".to_string(),
+                text: "LineSearch: Initial alpha must be > 0.".to_string(),
             }
             .into());
         }
@@ -135,6 +138,7 @@ where
         op: &mut OpWrapper<O>,
         state: &IterState<O>,
     ) -> Result<Option<ArgminIterData<O>>, Error> {
+        println!("init backtracking");
         self.init_param = state.get_param();
         let cost = state.get_cost();
         self.init_cost = if cost == F::infinity() {
@@ -148,6 +152,8 @@ where
             .map(Result::Ok)
             .unwrap_or_else(|| op.gradient(&self.init_param))?;
 
+        self.next_alpha = self.alpha;
+
         if self.search_direction.is_none() {
             return Err(ArgminError::NotInitialized {
                 text: "BacktrackingLineSearch: search_direction must be set.".to_string(),
@@ -155,6 +161,7 @@ where
             .into());
         }
 
+        println!("dot(search_direction, grad)={:.e}", self.search_direction.as_ref().unwrap().dot(&self.init_grad).to_f64().unwrap());
         let out = self.backtracking_step(op)?;
         Ok(Some(out))
     }
@@ -169,7 +176,9 @@ where
     }
 
     fn terminate(&mut self, state: &IterState<O>) -> TerminationReason {
-        if state.iter != 0
+        // The iteration 0 of the backtracking has to be ignored, because we didn't apply the search
+        // direction to the state, yet.
+        if state.iter > 0
             && self.condition.eval(
                 state.get_cost(),
                 state.get_grad().unwrap_or_default(),
