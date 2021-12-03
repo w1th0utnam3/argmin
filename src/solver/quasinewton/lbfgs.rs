@@ -142,12 +142,7 @@ where
         // Run solver
         let ArgminResult {
             operator: line_op,
-            state:
-                IterState {
-                    param: xk1,
-                    cost: next_cost,
-                    ..
-                },
+            state: next_state,
         } = Executor::new(
             OpWrapper::new_from_wrapper(op),
             self.linesearch.clone(),
@@ -160,12 +155,18 @@ where
 
         // take back operator and take care of function evaluation counts
         op.consume_op(line_op);
+        op.cost_func_count += next_state.cost_func_count;
+        op.grad_func_count += next_state.grad_func_count;
+        op.hessian_func_count += next_state.hessian_func_count;
+        op.jacobian_func_count += next_state.jacobian_func_count;
+        op.modify_func_count += next_state.modify_func_count;
 
         if state.get_iter() >= self.m as u64 {
             self.s.pop_front();
             self.y.pop_front();
         }
 
+        let xk1 = next_state.param;
         let grad = op.gradient(&xk1)?;
 
         self.s.push_back(xk1.sub(&param));
@@ -173,7 +174,7 @@ where
 
         Ok(ArgminIterData::new()
             .param(xk1)
-            .cost(next_cost)
+            .cost(next_state.cost)
             .grad(grad)
             .kv(make_kv!("gamma" => gamma;)))
     }
