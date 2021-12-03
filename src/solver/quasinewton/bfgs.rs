@@ -119,12 +119,7 @@ where
         // Run solver
         let ArgminResult {
             operator: line_op,
-            state:
-                IterState {
-                    param: xk1,
-                    cost: next_cost,
-                    ..
-                },
+            state: next_state,
         } = Executor::new(
             OpWrapper::new_from_wrapper(op),
             self.linesearch.clone(),
@@ -137,7 +132,13 @@ where
 
         // take care of function eval counts
         op.consume_op(line_op);
+        op.cost_func_count += next_state.cost_func_count;
+        op.grad_func_count += next_state.grad_func_count;
+        op.hessian_func_count += next_state.hessian_func_count;
+        op.jacobian_func_count += next_state.jacobian_func_count;
+        op.modify_func_count += next_state.modify_func_count;
 
+        let xk1 = next_state.param;
         let grad = op.gradient(&xk1)?;
 
         let yk = grad.sub(&prev_grad);
@@ -167,7 +168,10 @@ where
 
         self.inv_hessian = tmp1.dot(&self.inv_hessian.dot(&tmp2)).add(&sksk);
 
-        Ok(ArgminIterData::new().param(xk1).cost(next_cost).grad(grad))
+        Ok(ArgminIterData::new()
+            .param(xk1)
+            .cost(next_state.cost)
+            .grad(grad))
     }
 
     fn terminate(&mut self, state: &IterState<O>) -> TerminationReason {
