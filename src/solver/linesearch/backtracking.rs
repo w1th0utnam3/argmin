@@ -74,7 +74,10 @@ where
     P: ArgminSub<P, P> + ArgminDot<P, F> + ArgminScaledAdd<P, F, P>,
     L: LineSearchCondition<P, F>,
 {
-    fn backtracking_step<O: ArgminOp<Param = P, Output = F, Float = F>,>(&self, op: &mut OpWrapper<O>) -> Result<ArgminIterData<O>, Error> {
+    fn backtracking_step<O: ArgminOp<Param = P, Output = F, Float = F>>(
+        &self,
+        op: &mut OpWrapper<O>,
+    ) -> Result<ArgminIterData<O>, Error> {
         let new_param = self
             .init_param
             .scaled_add(&self.alpha, self.search_direction.as_ref().unwrap());
@@ -82,7 +85,11 @@ where
         let cur_cost = op.apply(&new_param)?;
 
         println!("alpha={}", self.alpha);
-        println!("cur_cost={:.e}, cost_diff={:.e}", cur_cost.to_f64().unwrap(), (self.init_cost - cur_cost).to_f64().unwrap());
+        println!(
+            "cur_cost={:.e}, cost_diff={:.e}",
+            cur_cost.to_f64().unwrap(),
+            (self.init_cost - cur_cost).to_f64().unwrap()
+        );
 
         let out = if self.condition.requires_cur_grad() {
             ArgminIterData::new()
@@ -90,9 +97,7 @@ where
                 .param(new_param)
                 .cost(cur_cost)
         } else {
-            ArgminIterData::new()
-                .param(new_param)
-                .cost(cur_cost)
+            ArgminIterData::new().param(new_param).cost(cur_cost)
         };
 
         Ok(out)
@@ -123,6 +128,7 @@ where
     }
 }
 
+/*
 impl<P, L, F: ArgminFloat> BacktrackingLineSearch<P, L, F>
 where
     P: ArgminScaledAdd<P, F, P>,
@@ -150,10 +156,17 @@ where
         Ok(out)
     }
 }
+*/
 
 impl<O, P, L, F> Solver<O> for BacktrackingLineSearch<P, L, F>
 where
-    P: Clone + Default + Serialize + DeserializeOwned + ArgminScaledAdd<P, F, P>,
+    P: Clone
+        + Default
+        + Serialize
+        + DeserializeOwned
+        + ArgminSub<P, P>
+        + ArgminDot<P, F>
+        + ArgminScaledAdd<P, F, P>,
     O: ArgminOp<Param = P, Output = F, Float = F>,
     L: LineSearchCondition<P, F>,
     F: ArgminFloat,
@@ -186,7 +199,15 @@ where
             .into());
         }
 
-        println!("dot(search_direction, grad)={:.e}", self.search_direction.as_ref().unwrap().dot(&self.init_grad).to_f64().unwrap());
+        println!(
+            "dot(search_direction, grad)={:.e}",
+            self.search_direction
+                .as_ref()
+                .unwrap()
+                .dot(&self.init_grad)
+                .to_f64()
+                .unwrap()
+        );
         let out = self.backtracking_step(op)?;
         Ok(Some(out))
     }
@@ -204,14 +225,13 @@ where
         println!("terminate iter={} alpha={}", state.iter, self.alpha);
 
         if self.condition.eval(
-                state.get_cost(),
-                state.get_grad().unwrap_or_default(),
-                self.init_cost,
-                self.init_grad.clone(),
-                self.search_direction.clone().unwrap(),
-                self.alpha,
-            )
-        {
+            state.get_cost(),
+            state.get_grad().unwrap_or_default(),
+            self.init_cost,
+            self.init_grad.clone(),
+            self.search_direction.clone().unwrap(),
+            self.alpha,
+        ) {
             TerminationReason::LineSearchConditionMet
         } else {
             TerminationReason::NotTerminated
